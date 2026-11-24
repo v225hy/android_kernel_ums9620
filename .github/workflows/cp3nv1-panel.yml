@@ -1,0 +1,41 @@
+name: CP3NV1 panel validation
+
+on:
+  push:
+    paths:
+      - 'arch/arm64/boot/dts/sprd/lcd/lcd_icnl9922c_mipi_sharp.dtsi'
+      - 'arch/arm64/boot/dts/sprd/cp3nv1-icnl9922c-panel-overlay.dts'
+      - 'arch/arm64/boot/dts/sprd/Makefile'
+      - 'scripts/check-cp3nv1-panel.py'
+      - '.github/workflows/cp3nv1-panel.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  panel-static-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install device-tree tools
+        run: sudo apt-get update && sudo apt-get install -y device-tree-compiler gcc
+      - name: Validate recovered commands and compile panel overlay
+        run: python3 scripts/check-cp3nv1-panel.py
+      - name: Build isolated panel-data artifact
+        run: |
+          mkdir -p out-panel
+          cpp -nostdinc -undef -x assembler-with-cpp -P \
+            arch/arm64/boot/dts/sprd/cp3nv1-icnl9922c-panel-overlay.dts \
+            > out-panel/cp3nv1-icnl9922c-panel-overlay.dts
+          dtc -@ -I dts -O dtb \
+            -o out-panel/cp3nv1-icnl9922c-panel-overlay.dtbo \
+            out-panel/cp3nv1-icnl9922c-panel-overlay.dts
+          printf '%s\n' 'EXPERIMENTAL panel DATA ONLY. Not a complete device tree or flashable boot image.' \
+            'Board bias/GPIO integration and DSI VFP discrepancy remain unverified.' \
+            > out-panel/README.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cp3nv1-panel-data-experimental
+          path: out-panel/
