@@ -96,6 +96,10 @@ dtbo-$(CONFIG_ARCH_SPRD) += \
 
 endif #//BSP_BUILD_DT_OVERLAY
 endif
+
+# Experimental CP3NV1 panel data; board power wiring is intentionally separate.
+dtbo-$(CONFIG_ARCH_SPRD) += cp3nv1-icnl9922c-panel-overlay.dtbo
+
 always		:= $(dtb-y) $(dtbo-y)
 subdir-y	:= $(dts-dirs)
 clean-files	:= *.dtb *.dtbo

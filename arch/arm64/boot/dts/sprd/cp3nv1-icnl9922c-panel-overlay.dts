@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+/plugin/;
+
+/* Panel data only: does not enable unverified board GPIOs or bias power. */
+#include "lcd/lcd_icnl9922c_mipi_sharp.dtsi"
