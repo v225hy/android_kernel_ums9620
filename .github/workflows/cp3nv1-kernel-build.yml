@@ -1,0 +1,123 @@
+name: CP3NV1 kernel build
+
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: "Defconfig name from arch/arm64/configs"
+        required: false
+        default: "sprd_qogirn6pro_defconfig"
+        type: string
+      kcflags:
+        description: "Extra KCFLAGS (blank = tree default, which is -Werror)"
+        required: false
+        default: "-Wno-error"
+        type: string
+      ccache_max_size:
+        description: "ccache size limit"
+        required: false
+        default: "3G"
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cp3nv1-kernel-build.yml'
+      - 'arch/arm64/configs/*defconfig'
+      - 'arch/arm64/boot/dts/sprd/**'
+      - 'drivers/gpu/drm/sprd/**'
+      - 'drivers/regulator/**'
+      - 'scripts/check-cp3nv1-panel.py'
+
+concurrency:
+  group: cp3nv1-kernel-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.defconfig || 'sprd_qogirn6pro_defconfig' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      DEFCONFIG: ${{ inputs.defconfig || 'sprd_qogirn6pro_defconfig' }}
+      KCFLAGS_EXTRA: ${{ inputs.kcflags }}
+      # Stable ccache behaviour across runners: kernel builds embed paths and
+      # __TIME__-like macros that would otherwise defeat the cache.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: "content"
+      CCACHE_SLOPPINESS: "file_macro,time_macros,include_file_mtime,include_file_ctime"
+      CCACHE_MAXSIZE: ${{ inputs.ccache_max_size || '3G' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # drivers/kernelsu is a symlink into this submodule; Kconfig needs it.
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libelf-dev libssl-dev lz4 zstd xz-utils \
+            device-tree-compiler gcc gcc-aarch64-linux-gnu ccache git make zip
+
+      - name: Restore ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: cp3nv1-${{ env.DEFCONFIG }}-${{ runner.os }}
+          max-size: ${{ env.CCACHE_MAXSIZE }}
+          verbose: 1
+
+      - name: Configure kernel
+        run: |
+          set -eu
+          make -s "$DEFCONFIG"
+          # Keep the CC version in the cache key honest by recording it.
+          clang --version | head -1
+          grep -E '^CONFIG_(LOCALVERSION|DRM_SPRD|REGULATOR_SM5109)=' .config || true
+
+      - name: Build kernel image and modules
+        run: |
+          set -eu
+          ccache --zero-stats
+          make -j"$(nproc)" \
+            CC="ccache clang" \
+            KCFLAGS="$KCFLAGS_EXTRA" \
+            Image Image.gz modules
+          ccache --show-stats
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          set -eu
+          mkdir -p out-artifacts
+          cp .config out-artifacts/kernel.config
+          for f in arch/arm64/boot/Image arch/arm64/boot/Image.gz vmlinux Module.symvers; do
+            [ -f "$f" ] && cp "$f" out-artifacts/ || true
+          done
+          if ls drivers/gpu/drm/sprd/sprd-drm.ko >/dev/null 2>&1; then
+            cp drivers/gpu/drm/sprd/sprd-drm.ko out-artifacts/ || true
+          fi
+          if ls drivers/regulator/sm5109-regulator.ko >/dev/null 2>&1; then
+            cp drivers/regulator/sm5109-regulator.ko out-artifacts/ || true
+          fi
+          find . -name '*.ko' -not -path './out-artifacts/*' -print0 2>/dev/null \
+            | tar --null -czf out-artifacts/kernel-modules.tar.gz -T - || true
+          printf '%s\n' \
+            'UNVERIFIED BUILD. Built from the 5.4.302 source tree, not the stock 5.4.210 release.' \
+            'Not a flashable boot.img: repacking with mkbootimg/vendor_boot tooling is a separate step.' \
+            'GPIO pinmux and bias register encoding remain unproven; do not flash blind.' \
+            > out-artifacts/README.txt
+          ls -l out-artifacts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cp3nv1-kernel-${{ github.sha }}
+          path: out-artifacts/
+          if-no-files-found: warn
