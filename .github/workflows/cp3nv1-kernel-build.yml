@@ -83,13 +83,21 @@ jobs:
 
       - name: Build kernel image and modules
         run: |
-          set -eu
+          set -o pipefail
           ccache --zero-stats
-          make -j"$(nproc)" \
-            CC="ccache clang" \
-            KCFLAGS="$KCFLAGS_EXTRA" \
-            Image Image.gz modules
-          ccache --show-stats
+          if ! make -j"$(nproc)" \
+                CC="ccache clang" \
+                KCFLAGS="$KCFLAGS_EXTRA" \
+                Image Image.gz modules 2>&1 | tee /tmp/build.log; then
+            {
+              echo '### Build failed — last 120 lines'
+              echo '```'
+              tail -120 /tmp/build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          ccache --show-stats | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Collect artifacts
         if: always()
