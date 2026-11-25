@@ -115,12 +115,12 @@ jobs:
           lines = pathlib.Path('/tmp/build.log').read_text(errors='replace').splitlines()
           errors = []
           for i, line in enumerate(lines):
-              if re.search(r'error:|undefined reference|Error [0-9]|Killed|No rule to make|error|unifdef', line, re.I):
+              if re.search(r'error:|undefined reference|Error [0-9]|Killed|No rule to make|error |unifdef:|leak|not found|No such file', line, re.I):
                   errors.extend(lines[max(0, i-2):i+2])
           errors = list(dict.fromkeys(errors))
-          for line in (errors[:40] or lines[-20:]):
-              escaped = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print('::error title=Kernel build diagnostic::' + escaped)
+          report = '\n'.join(errors[:100] or lines[-60:])
+          escaped = report.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::error title=Kernel build diagnostic::' + escaped)
           PY
             ccache --show-stats
             exit 1
