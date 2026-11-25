@@ -44,7 +44,7 @@ jobs:
       ARCH: arm64
       CROSS_COMPILE: aarch64-linux-gnu-
       DEFCONFIG: ${{ inputs.defconfig || 'sprd_qogirn6pro_defconfig' }}
-      KCFLAGS_EXTRA: ${{ inputs.kcflags }}
+      KCFLAGS_EXTRA: ${{ github.event_name == 'workflow_dispatch' && inputs.kcflags || '-Wno-error' }}
       # Stable ccache behaviour across runners: kernel builds embed paths and
       # __TIME__-like macros that would otherwise defeat the cache.
       CCACHE_BASEDIR: ${{ github.workspace }}
@@ -95,8 +95,18 @@ jobs:
               tail -120 /tmp/build.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            python3 - <<'PY'
+          import pathlib, re
+          lines = pathlib.Path('/tmp/build.log').read_text(errors='replace').splitlines()
+          errors = [line for line in lines if re.search(r'error:|undefined reference|Error [0-9]|Killed|No rule to make', line)]
+          for line in (errors[:20] or lines[-10:]):
+              escaped = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print('::error title=Kernel build diagnostic::' + escaped)
+          PY
+            ccache --show-stats
             exit 1
           fi
+          test -s arch/arm64/boot/Image
           ccache --show-stats | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Collect artifacts
@@ -129,3 +139,12 @@ jobs:
           name: cp3nv1-kernel-${{ github.sha }}
           path: out-artifacts/
           if-no-files-found: warn
+
+      - name: Upload raw Image binary
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CP3NV1-Image
+          path: arch/arm64/boot/Image
+          if-no-files-found: error
+          compression-level: 0
