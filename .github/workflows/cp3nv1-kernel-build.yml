@@ -28,6 +28,8 @@ on:
       - 'drivers/regulator/**'
       - 'include/uapi/**'
       - 'scripts/check-cp3nv1-panel.py'
+      - 'scripts/repack-cp3nv1-boot.sh'
+      - 'boot/stock/boot.img'
 
 concurrency:
   group: cp3nv1-kernel-build-${{ github.ref }}
@@ -68,7 +70,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison flex libelf-dev libssl-dev lz4 zstd xz-utils \
             device-tree-compiler gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            clang-14 llvm-14 lld-14 cpio ccache git make zip \
+            clang-14 llvm-14 lld-14 cpio ccache git make zip wget \
             libc6-dev-arm64-cross libc6-dev-armel-cross
           # Select the complete LLVM 14 suite for configure AND build.
           echo '/usr/lib/llvm-14/bin' >> "$GITHUB_PATH"
@@ -133,6 +135,29 @@ jobs:
           test -s arch/arm64/boot/Image
           ccache --show-stats | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Repack stock boot with new kernel
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/magiskboot"
+          wget -q --https-only -O "$RUNNER_TEMP/Magisk-v28.1.apk" \
+            https://github.com/topjohnwu/Magisk/releases/download/v28.1/Magisk-v28.1.apk
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          dst = pathlib.Path(os.environ['RUNNER_TEMP']) / 'magiskboot/magiskboot'
+          with zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP']) / 'Magisk-v28.1.apk') as apk:
+              dst.write_bytes(apk.read('lib/x86_64/libmagiskboot.so'))
+          dst.chmod(0o755)
+          PY
+          bash scripts/repack-cp3nv1-boot.sh "$RUNNER_TEMP/magiskboot/magiskboot"
+
+      - name: Upload repacked boot image
+        uses: actions/upload-artifact@v4
+        with:
+          name: CP3NV1-boot
+          path: out-boot/
+          if-no-files-found: error
+          compression-level: 0
+
       - name: Collect artifacts
         if: always()
         run: |
@@ -152,7 +177,7 @@ jobs:
             | tar --null -czf out-artifacts/kernel-modules.tar.gz -T - || true
           printf '%s\n' \
             'UNVERIFIED BUILD. Built from the 5.4.302 source tree, not the stock 5.4.210 release.' \
-            'Not a flashable boot.img: repacking with mkbootimg/vendor_boot tooling is a separate step.' \
+            'Raw Image here; separately repacked experimental boot.img is in CP3NV1-boot.' \
             'GPIO pinmux and bias register encoding remain unproven; do not flash blind.' \
             > out-artifacts/README.txt
           ls -l out-artifacts
