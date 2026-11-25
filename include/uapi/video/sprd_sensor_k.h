@@ -13,48 +13,45 @@
 #ifndef _SPRD_SENSOR_K_H_
 #define _SPRD_SENSOR_K_H_
 
-#ifdef __KERNEL__
 #include <linux/types.h>
-#else
-#include <stdint.h>
-#endif
+#include <linux/ioctl.h>
 
 struct sensor_i2c_tag {
-	uint8_t  *i2c_data;
-	uint16_t i2c_count;
-	uint16_t slave_addr;
-	uint16_t read_len;
+	__u8  *i2c_data;
+	__u16 i2c_count;
+	__u16 slave_addr;
+	__u16 read_len;
 };
 
 struct sensor_i2c_seq_tag {
-	uint8_t  *i2c_data;
-	uint16_t i2c_count;
-	uint16_t slave_addr;
-	uint16_t wr_cnt;
-	uint16_t rd_cnt;
+	__u8  *i2c_data;
+	__u16 i2c_count;
+	__u16 slave_addr;
+	__u16 wr_cnt;
+	__u16 rd_cnt;
 };
 
 struct sensor_reg_tag {
-	uint16_t reg_addr;
-	uint16_t reg_value;
+	__u16 reg_addr;
+	__u16 reg_value;
 };
 
 struct sensor_reg_bits_tag {
-	uint16_t reg_addr;
-	uint16_t reg_value;
-	uint32_t reg_bits;
+	__u16 reg_addr;
+	__u16 reg_value;
+	__u32 reg_bits;
 };
 
 struct sensor_reg_tab_tag {
 	struct sensor_reg_tag *sensor_reg_tab_ptr;
-	uint32_t reg_count;
-	uint32_t reg_bits;
-	uint32_t burst_mode;
+	__u32 reg_count;
+	__u32 reg_bits;
+	__u32 burst_mode;
 };
 
 struct sensor_flash_level {
-	uint32_t low_light;
-	uint32_t high_light;
+	__u32 low_light;
+	__u32 high_light;
 };
 
 enum INTERFACE_OP_ID {
@@ -68,33 +65,33 @@ enum INTERFACE_TYPE_ID {
 };
 
 struct sensor_if_cfg_tag {
-	uint32_t is_open;
-	uint32_t if_type;
-	uint32_t phy_id;
-	uint32_t lane_num;
-	uint32_t bps_per_lane;
-	uint32_t is_cphy;
-	uint64_t lane_seq;
+	__u32 is_open;
+	__u32 if_type;
+	__u32 phy_id;
+	__u32 lane_num;
+	__u32 bps_per_lane;
+	__u32 is_cphy;
+	__u64 lane_seq;
 };
 
 struct sensor_socid_tag {
-	uint32_t d_die;
-	uint32_t a_die;
+	__u32 d_die;
+	__u32 a_die;
 };
 
 struct sensor_power {
-	uint32_t af_volt_level;
-	uint32_t avdd_volt_level;
-	uint32_t dvdd_volt_level;
-	uint32_t iovdd_volt_level;
-	uint32_t power_down_level;
-	uint32_t reset_level;
-	uint32_t default_mclk;
+	__u32 af_volt_level;
+	__u32 avdd_volt_level;
+	__u32 dvdd_volt_level;
+	__u32 iovdd_volt_level;
+	__u32 power_down_level;
+	__u32 reset_level;
+	__u32 default_mclk;
 };
 
 struct sensor_power_info_tag {
-	uint32_t            is_on;
-	uint32_t            op_sensor_id;
+	__u32            is_on;
+	__u32            op_sensor_id;
 	struct sensor_power dev0;
 	struct sensor_power dev1;
 	struct sensor_power dev2;
@@ -109,36 +106,36 @@ enum sensor_otp_param_type_t {
 };
 
 struct _sensor_otp_data_info_tag {
-	uint32_t size;
+	__u32 size;
 	void    *data_ptr;
 };
 
 struct _sensor_otp_param_tag {
-	uint32_t type;
-	uint32_t start_addr;
-	uint32_t len;
-	uint8_t *buff;
+	__u32 type;
+	__u32 start_addr;
+	__u32 len;
+	__u8 *buff;
 	struct _sensor_otp_data_info_tag golden;
 	struct _sensor_otp_data_info_tag awb;
 	struct _sensor_otp_data_info_tag lsc;
 };
 
 struct sensor_muti_aec_i2c_tag {
-	uint16_t __user *sensor_id;
-	uint16_t id_size;
-	uint16_t __user *i2c_slave_addr;
-	uint16_t i2c_slave_len;
-	uint16_t __user *addr_bits_type;
-	uint16_t addr_bits_type_len;
-	uint16_t __user *data_bits_type;
-	uint16_t data_bits_type_len;
-	struct sensor_reg_tag __user *master_i2c_tab;
-	uint16_t msize;
-	struct sensor_reg_tag __user *slave_i2c_tab;
-	uint16_t ssize;
+	__u16 *sensor_id;
+	__u16 id_size;
+	__u16 *i2c_slave_addr;
+	__u16 i2c_slave_len;
+	__u16 *addr_bits_type;
+	__u16 addr_bits_type_len;
+	__u16 *data_bits_type;
+	__u16 data_bits_type_len;
+	struct sensor_reg_tag *master_i2c_tab;
+	__u16 msize;
+	struct sensor_reg_tag *slave_i2c_tab;
+	__u16 ssize;
 	/* TODO optimize this later */
-	struct sensor_reg_tag __user *slave_i2c_tab_2;
-	uint16_t ssize_2;
+	struct sensor_reg_tag *slave_i2c_tab_2;
+	__u16 ssize_2;
 };
 
 #define AEC_I2C_SETTINGS_MAX 64
@@ -147,39 +144,39 @@ struct sensor_muti_aec_i2c_tag {
 #define SENSOR_IOC_MAGIC			'R'
 
 #define SENSOR_IO_PD	\
-	 _IOW(SENSOR_IOC_MAGIC,  0,  uint8_t)
+	 _IOW(SENSOR_IOC_MAGIC,  0,  __u8)
 #define SENSOR_IO_SET_AVDD	\
-	 _IOW(SENSOR_IOC_MAGIC,  1,  uint32_t)
+	 _IOW(SENSOR_IOC_MAGIC,  1,  __u32)
 #define SENSOR_IO_SET_DVDD	\
-	 _IOW(SENSOR_IOC_MAGIC,  2,  uint32_t)
+	 _IOW(SENSOR_IOC_MAGIC,  2,  __u32)
 #define SENSOR_IO_SET_IOVDD \
-	_IOW(SENSOR_IOC_MAGIC,  3,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  3,  __u32)
 #define SENSOR_IO_SET_MCLK	\
-	_IOW(SENSOR_IOC_MAGIC,  4,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  4,  __u32)
 #define SENSOR_IO_RST	\
-	_IOW(SENSOR_IOC_MAGIC,  5,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  5,  __u32)
 #define SENSOR_IO_I2C_INIT	\
-	_IOW(SENSOR_IOC_MAGIC,  6,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  6,  __u32)
 #define SENSOR_IO_I2C_DEINIT	\
-	_IOW(SENSOR_IOC_MAGIC,  7,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  7,  __u32)
 #define SENSOR_IO_SET_ID	\
-	_IOW(SENSOR_IOC_MAGIC,  8,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  8,  __u32)
 #define SENSOR_IO_RST_LEVEL	\
-	_IOW(SENSOR_IOC_MAGIC,  9,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  9,  __u32)
 #define SENSOR_IO_I2C_ADDR	\
-	_IOW(SENSOR_IOC_MAGIC,  10, uint16_t)
+	_IOW(SENSOR_IOC_MAGIC,  10, __u16)
 #define SENSOR_IO_I2C_READ	\
 	_IOWR(SENSOR_IOC_MAGIC, 11, struct sensor_reg_bits_tag)
 #define SENSOR_IO_I2C_WRITE	\
 	_IOW(SENSOR_IOC_MAGIC,  12, struct sensor_reg_bits_tag)
 #define SENSOR_IO_SET_FLASH	\
-	_IOW(SENSOR_IOC_MAGIC,  13, uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  13, __u32)
 #define SENSOR_IO_I2C_WRITE_REGS	\
 	_IOW(SENSOR_IOC_MAGIC,  14, struct sensor_reg_tab_tag)
 #define SENSOR_IO_SET_CAMMOT	\
-	_IOW(SENSOR_IOC_MAGIC,  15, uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  15, __u32)
 #define SENSOR_IO_SET_I2CCLOCK	\
-	_IOW(SENSOR_IOC_MAGIC,  16, uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  16, __u32)
 #define SENSOR_IO_GET_FLASH_LEVEL	\
 	_IOWR(SENSOR_IOC_MAGIC, 17, struct sensor_flash_level)
 #define SENSOR_IO_IF_CFG	\
@@ -191,7 +188,7 @@ struct sensor_muti_aec_i2c_tag {
 #define SENSOR_IO_POWER_CFG	\
 	_IOWR(SENSOR_IOC_MAGIC, 21, struct sensor_power_info_tag)
 #define SENSOR_IO_SET_MIPI_SWITCH	\
-	_IOW(SENSOR_IOC_MAGIC,  22,  uint32_t)
+	_IOW(SENSOR_IOC_MAGIC,  22,  __u32)
 #define SENSOR_IO_MUTI_I2C_WRITE	\
 	_IOW(SENSOR_IOC_MAGIC,  23, struct sensor_muti_aec_i2c_tag)
 #define SENSOR_IO_IF_SWITCH            \
