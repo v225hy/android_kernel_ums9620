@@ -68,7 +68,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison flex libelf-dev libssl-dev lz4 zstd xz-utils \
             device-tree-compiler gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            clang-14 llvm-14 lld-14 cpio ccache git make zip
+            clang-14 llvm-14 lld-14 cpio ccache git make zip \
+            libc6-dev-arm64-cross libc6-dev-armel-cross
           # Select the complete LLVM 14 suite for configure AND build.
           echo '/usr/lib/llvm-14/bin' >> "$GITHUB_PATH"
 
@@ -112,8 +113,12 @@ jobs:
             python3 - <<'PY'
           import pathlib, re
           lines = pathlib.Path('/tmp/build.log').read_text(errors='replace').splitlines()
-          errors = [line for line in lines if re.search(r'error:|undefined reference|Error [0-9]|Killed|No rule to make', line)]
-          for line in (errors[:20] or lines[-10:]):
+          errors = []
+          for i, line in enumerate(lines):
+              if re.search(r'error:|undefined reference|Error [0-9]|Killed|No rule to make|error|unifdef', line, re.I):
+                  errors.extend(lines[max(0, i-2):i+2])
+          errors = list(dict.fromkeys(errors))
+          for line in (errors[:40] or lines[-20:]):
               escaped = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               print('::error title=Kernel build diagnostic::' + escaped)
           PY
