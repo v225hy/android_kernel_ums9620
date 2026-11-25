@@ -26,6 +26,7 @@ on:
       - 'arch/arm64/boot/dts/sprd/**'
       - 'drivers/gpu/drm/sprd/**'
       - 'drivers/regulator/**'
+      - 'include/uapi/**'
       - 'scripts/check-cp3nv1-panel.py'
 
 concurrency:
