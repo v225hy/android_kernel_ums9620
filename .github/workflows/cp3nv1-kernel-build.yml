@@ -87,7 +87,8 @@ jobs:
           scripts/config --file .config -e REGULATOR_SM5109 -e DRM_SPRD \
             -e DRM_SPRD_DSI -e DRM_SPRD_DPU0 \
             -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK \
-            -e THINLTO
+            -e THINLTO -e UNISOC_IOMMU -e DVFS_APSYS_SPRD \
+            -e TRUSTY -e TRUSTY_VIRTIO -e TRUSTY_VIRTIO_IPC
           make -s CC="ccache clang" olddefconfig
           clang --version | head -1
           ld.lld --version
