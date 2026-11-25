@@ -104,10 +104,33 @@ are unknown. Do not infer a supply voltage from the IC feature summary.
 The built-in generic panel driver obtains power-supply, avdd/avee/reset-gpios
 and sprd,backlight from the DSI child node, not from /lcds. Its built-in power
 sequence uses 5 ms per enable GPIO and has no I2C bias implementation. It is
-therefore NOT yet equivalent to U-Boot. The out-of-tree display module has a
-different bias interface with external symbols whose implementations are not
-present here. This commit does not claim or emulate that missing implementation.
-Complete and verify board-specific bias sequencing and backlight wiring first.
+therefore not equivalent to U-Boot on its own.
+
+Sequencing implementation
+-------------------------
+
+drivers/regulator/sm5109-regulator.c provides a board-specific sequencing
+supply that replays the recovered U-Boot behaviour in one place: ENP high plus
+10 ms, ENN high plus 20 ms, reset high 5 ms, low 5 ms, high 20 ms, then raw
+writes 0x00=0x14 and 0x01=0x14 over I2C. It intentionally exposes no voltage
+operations, because the register encoding is not documented by the available
+one-page SM5109 feature summary and must not be guessed as "6 V".
+
+The opt-in board overlay cp3nv1-icnl9922c-board-overlay.dtso enables I2C6,
+instantiates the supply at address 0x3e, owns ENP/ENN/reset GPIOs 192/191/11 and
+points the DSI child's power-supply at it while setting
+sprd,external-power-sequencer. In that mode the generic panel driver relinquishes
+the shared TDDI reset line, so exactly one driver owns each GPIO. Without the
+overlay the previously committed panel data behaves as before.
+
+Known gaps: the GPIO numbers are U-Boot global indices and their Linux mapping,
+polarity and pinmux are still unverified; no regulator-boot-on handoff is
+claimed, so an already-lit panel left by the bootloader is re-sequenced when the
+panel is next prepared; the reverse-order rail shutdown in the driver is an
+engineering choice, not recovered behaviour; the ID read that U-Boot performs
+between reset and the bias writes cannot be issued from this I2C driver.
+Backlight wiring and the out-of-tree display module's external bias symbols
+remain outside this change.
 
 Validation
 ----------

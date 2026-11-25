@@ -4,8 +4,12 @@ on:
   push:
     paths:
       - 'arch/arm64/boot/dts/sprd/lcd/lcd_icnl9922c_mipi_sharp.dtsi'
-      - 'arch/arm64/boot/dts/sprd/cp3nv1-icnl9922c-panel-overlay.dts'
+      - 'arch/arm64/boot/dts/sprd/cp3nv1-icnl9922c-*-overlay.dts'
       - 'arch/arm64/boot/dts/sprd/Makefile'
+      - 'drivers/regulator/sm5109-regulator.c'
+      - 'drivers/regulator/Kconfig'
+      - 'drivers/regulator/Makefile'
+      - 'drivers/gpu/drm/sprd/sprd_dsi_panel.c'
       - 'scripts/check-cp3nv1-panel.py'
       - '.github/workflows/cp3nv1-panel.yml'
   pull_request:
@@ -19,23 +23,47 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install device-tree tools
-        run: sudo apt-get update && sudo apt-get install -y device-tree-compiler gcc
-      - name: Validate recovered commands and compile panel overlay
-        run: python3 scripts/check-cp3nv1-panel.py
-      - name: Build isolated panel-data artifact
+        with:
+          # drivers/kernelsu is a symlink into this submodule; Kconfig needs it.
+          submodules: recursive
+      - name: Install build tools
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            device-tree-compiler gcc bc bison flex libelf-dev libssl-dev \
+            gcc-aarch64-linux-gnu
+      - name: Validate recovered commands, board wiring and driver constants
+        run: python3 scripts/check-cp3nv1-panel.py
+      - name: Build experimental overlays
+        run: |
+          set -eu
           mkdir -p out-panel
-          cpp -nostdinc -undef -x assembler-with-cpp -P \
-            arch/arm64/boot/dts/sprd/cp3nv1-icnl9922c-panel-overlay.dts \
-            > out-panel/cp3nv1-icnl9922c-panel-overlay.dts
-          dtc -@ -I dts -O dtb \
-            -o out-panel/cp3nv1-icnl9922c-panel-overlay.dtbo \
-            out-panel/cp3nv1-icnl9922c-panel-overlay.dts
-          printf '%s\n' 'EXPERIMENTAL panel DATA ONLY. Not a complete device tree or flashable boot image.' \
-            'Board bias/GPIO integration and DSI VFP discrepancy remain unverified.' \
+          for name in cp3nv1-icnl9922c-panel-overlay cp3nv1-icnl9922c-board-overlay; do
+            cpp -nostdinc -undef -x assembler-with-cpp -P \
+              -I include -I arch/arm64/boot/dts/sprd \
+              -I scripts/dtc/include-prefixes \
+              "arch/arm64/boot/dts/sprd/$name.dts" > "out-panel/$name.dts"
+            dtc -@ -I dts -O dtb -o "out-panel/$name.dtbo" "out-panel/$name.dts"
+          done
+          printf '%s\n' \
+            'EXPERIMENTAL panel data plus opt-in board wiring.' \
+            'Not a complete device tree and not a flashable boot image.' \
+            'GPIO mapping, bias encoding and the DSI VFP discrepancy remain unverified.' \
             > out-panel/README.txt
+      - name: Compile the bias sequencing driver
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
+          CC: clang
+        run: |
+          set -eu
+          make -s sprd_qogirn6pro_defconfig
+          scripts/config --file .config -m REGULATOR_SM5109 -e I2C -e REGULATOR -e REGMAP_I2C
+          make -s olddefconfig
+          make -s -j"$(nproc)" modules_prepare
+          make -j"$(nproc)" M=drivers/regulator modules
+          test -f drivers/regulator/sm5109-regulator.ko
       - uses: actions/upload-artifact@v4
         with:
-          name: cp3nv1-panel-data-experimental
+          name: cp3nv1-panel-experimental
           path: out-panel/

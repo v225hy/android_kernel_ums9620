@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * CP3NV1 experimental board wiring for LCD_ICNL9922C_MIPI_SHARP.
+ *
+ * Only the GPIO/bias side of the stock U-Boot power-up sequence is encoded
+ * here: ENP (GPIO192) high +10 ms, ENN (GPIO191) high +20 ms, RESET
+ * (GPIO11) high 5 ms / low 5 ms / high 20 ms, then I2C6 0x3e writes
+ * 00=0x14 and 01=0x14.  Applying this overlay is an explicit opt-in;
+ * flashing it is not a validated display enablement.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "lcd/lcd_icnl9922c_mipi_sharp.dtsi"
+
+&i2c6 {
+	status = "okay";
+	clock-frequency = <400000>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	cp3nv1_lcd_bias: lcd-bias@3e {
+		compatible = "coolpad,cp3nv1-lcd-bias";
+		reg = <0x3e>;
+
+		/*
+		 * ENP/ENN are the two bias enables U-Boot raises in order.
+		 * The reset line is shared with the TDDI touch half, so this
+		 * node owns it instead of the generic panel driver.
+		 */
+		enp-gpios = <&ap_gpio 192 GPIO_ACTIVE_HIGH>;
+		enn-gpios = <&ap_gpio 191 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&ap_gpio 11 GPIO_ACTIVE_HIGH>;
+
+		regulators {
+			/* No voltage is claimed: the register encoding is unproven. */
+			cp3nv1_lcd_bias_supply: lcd-bias {
+				regulator-name = "cp3nv1-lcd-bias";
+			};
+		};
+	};
+};
+
+&panel {
+	power-supply = <&cp3nv1_lcd_bias_supply>;
+	/* Bias enables and panel reset belong to the sequencer above. */
+	sprd,external-power-sequencer;
+};

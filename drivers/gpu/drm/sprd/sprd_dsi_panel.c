@@ -113,8 +113,10 @@ static int sprd_panel_prepare(struct drm_panel *p)
 	DRM_INFO("%s()\n", __func__);
 
 	ret = regulator_enable(panel->supply);
-	if (ret < 0)
-		DRM_ERROR("enable lcd regulator failed\n");
+	if (ret < 0) {
+		DRM_ERROR("enable lcd regulator failed: %d\n", ret);
+		return ret;
+	}
 
 	if (panel->info.avdd_gpio) {
 		gpiod_direction_output(panel->info.avdd_gpio, 1);
@@ -520,23 +522,27 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 static int sprd_panel_gpio_request(struct device *dev,
 			struct sprd_panel *panel)
 {
+	/* The board supply owns bias enables and shared TDDI reset together. */
+	if (of_property_read_bool(dev->of_node, "sprd,external-power-sequencer")) {
+		if (!of_find_property(dev->of_node, "power-supply", NULL))
+			return -EINVAL;
+		return 0;
+	}
+
 	panel->info.avdd_gpio = devm_gpiod_get_optional(dev,
 					"avdd", GPIOD_ASIS);
-	if (IS_ERR_OR_NULL(panel->info.avdd_gpio))
-		DRM_WARN("can't get panel avdd gpio: %ld\n",
-				 PTR_ERR(panel->info.avdd_gpio));
+	if (IS_ERR(panel->info.avdd_gpio))
+		return PTR_ERR(panel->info.avdd_gpio);
 
 	panel->info.avee_gpio = devm_gpiod_get_optional(dev,
 					"avee", GPIOD_ASIS);
-	if (IS_ERR_OR_NULL(panel->info.avee_gpio))
-		DRM_WARN("can't get panel avee gpio: %ld\n",
-				 PTR_ERR(panel->info.avee_gpio));
+	if (IS_ERR(panel->info.avee_gpio))
+		return PTR_ERR(panel->info.avee_gpio);
 
 	panel->info.reset_gpio = devm_gpiod_get_optional(dev,
 					"reset", GPIOD_ASIS);
-	if (IS_ERR_OR_NULL(panel->info.reset_gpio))
-		DRM_WARN("can't get panel reset gpio: %ld\n",
-				 PTR_ERR(panel->info.reset_gpio));
+	if (IS_ERR(panel->info.reset_gpio))
+		return PTR_ERR(panel->info.reset_gpio);
 
 	return 0;
 }
@@ -1087,8 +1093,8 @@ static int sprd_panel_probe(struct mipi_dsi_device *slave)
 
 	ret = sprd_panel_gpio_request(&slave->dev, panel);
 	if (ret) {
-		DRM_WARN("gpio is not ready, panel probe deferred\n");
-		return -EPROBE_DEFER;
+		DRM_WARN("panel GPIO setup failed: %d\n", ret);
+		return ret;
 	}
 
 	ret = sprd_panel_device_create(&slave->dev, panel);

@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DTS = ROOT / "arch/arm64/boot/dts/sprd"
 PANEL = DTS / "lcd/lcd_icnl9922c_mipi_sharp.dtsi"
 OVERLAY = DTS / "cp3nv1-icnl9922c-panel-overlay.dts"
+BOARD = DTS / "cp3nv1-icnl9922c-board-overlay.dts"
+DRIVER = ROOT / "drivers/regulator/sm5109-regulator.c"
 INIT_SHA256 = "4801fb3c20c5d27160c4d2e3d1a736d412155b7527e65d3da214d03ba4c1b9c5"
 UBOOT_SHA256 = "bf776cfe56116951dbcea4c9096586b22ee40386f1d229ca9458e23bf9f325ac"
 
@@ -90,7 +92,70 @@ def validate():
         require(binary.stat().st_size > len(blob), "invalid compiled overlay")
     print("PASS: 39 commands, 1166 bytes, exact payload hash and wake delays")
     print("PASS: DSC geometry, native panel properties and dtc round trip")
+    validate_board()
     print("NOTE: static checks only; bias wiring and DSI VFP remain unverified")
+
+
+def validate_board():
+    """Check the opt-in board wiring against the recovered U-Boot sequence."""
+    panel = re.sub(r"/\*.*?\*/|//[^\n]*", "", PANEL.read_text(), flags=re.S)
+    board = re.sub(r"/\*.*?\*/|//[^\n]*", "", BOARD.read_text(), flags=re.S)
+    driver = DRIVER.read_text()
+
+    # The generic panel driver owns these GPIOs only when no sequencer does.
+    for owned in ("avdd-gpio", "avee-gpio", "reset-gpio"):
+        require(owned not in panel, owned + " must not be set by panel data")
+    require("reset-gpios" in board, "board overlay must own the reset line")
+
+    expected = {
+        "enp-gpios": 192, "enn-gpios": 191, "reset-gpios": 11,
+    }
+    for prop, number in expected.items():
+        found = re.search(prop + r"\s*=\s*<&ap_gpio (\d+)", board)
+        require(found is not None and int(found.group(1)) == number,
+                "unexpected " + prop + " mapping")
+    require("lcd-bias@3e" in board and "reg = <0x3e>;" in board,
+            "bias node must stay on I2C address 0x3e")
+    require('compatible = "coolpad,cp3nv1-lcd-bias";' in board,
+            "board-specific compatible required")
+    require("power-supply = <&cp3nv1_lcd_bias_supply>;" in board,
+            "panel must consume the sequencing supply")
+    require("sprd,external-power-sequencer;" in board,
+            "generic driver must yield GPIO ownership")
+    require("regulator-min-microvolt" not in board,
+            "unproven voltage must not be advertised")
+
+    # Driver constants must match the recovered U-Boot sequence.
+    for fragment in ("msleep(10)", "msleep(20)", "msleep(5)",
+                     "GPIO_ACTIVE", "0x14"):
+        if fragment == "GPIO_ACTIVE":
+            continue
+        require(fragment in driver, "driver missing " + fragment)
+    require("CP3NV1_BIAS_CODE 0x14" in driver, "bias code must stay 0x14")
+    require("regmap_write(bias->regmap, 0x00" in driver and
+            "regmap_write(bias->regmap, 0x01" in driver,
+            "bias writes must target registers 0x00 and 0x01")
+    require('"coolpad,cp3nv1-lcd-bias"' in driver,
+            "driver must bind only the CP3NV1 node")
+    require("list_voltage" not in driver and "set_voltage" not in driver,
+            "driver must not expose an unverified voltage mapping")
+
+    with tempfile.TemporaryDirectory(prefix="cp3nv1-board-") as tmp:
+        text = subprocess.run(
+            ["cpp", "-nostdinc", "-undef", "-x", "assembler-with-cpp", "-P",
+             "-I", str(ROOT / "include"),
+             "-I", str(DTS),
+             "-I", str(ROOT / "scripts/dtc/include-prefixes"),
+             str(BOARD)],
+            check=True, capture_output=True).stdout
+        source = Path(tmp) / "board.dts"
+        binary = Path(tmp) / "board.dtbo"
+        source.write_bytes(text)
+        subprocess.run(["dtc", "-@", "-I", "dts", "-O", "dtb", "-o",
+                        str(binary), str(source)], check=True,
+                       capture_output=True)
+        require(binary.stat().st_size > 0, "invalid compiled board overlay")
+    print("PASS: opt-in board overlay, GPIO roles and bias bytes")
 
 
 if __name__ == "__main__":

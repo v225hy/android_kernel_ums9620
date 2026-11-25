@@ -99,6 +99,8 @@ endif
 
 # Experimental CP3NV1 panel data; board power wiring is intentionally separate.
 dtbo-$(CONFIG_ARCH_SPRD) += cp3nv1-icnl9922c-panel-overlay.dtbo
+# Opt-in board wiring (bias sequencing + shared TDDI reset); unverified pins.
+dtbo-$(CONFIG_ARCH_SPRD) += cp3nv1-icnl9922c-board-overlay.dtbo
 
 always		:= $(dtb-y) $(dtbo-y)
 subdir-y	:= $(dts-dirs)

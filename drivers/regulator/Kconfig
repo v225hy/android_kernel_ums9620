@@ -658,6 +658,14 @@ config REGULATOR_PALMAS
 	  on the muxing. This is handled automatically in the driver by
 	  reading the mux info from OTP.
 
+config REGULATOR_SM5109
+	tristate "Silicon Mitus SM5109 LCD bias regulator"
+	depends on I2C && REGULATOR
+	select REGMAP_I2C
+	help
+	  Say y here to enable voltage regulator support for the Silicon Mitus
+	  SM5109 positive and negative LCD panel bias supply.
+
 config REGULATOR_PBIAS
 	tristate "PBIAS OMAP regulator driver"
 	depends on (ARCH_OMAP || COMPILE_TEST) && MFD_SYSCON
