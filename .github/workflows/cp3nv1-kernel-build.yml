@@ -43,6 +43,8 @@ jobs:
     env:
       ARCH: arm64
       CROSS_COMPILE: aarch64-linux-gnu-
+      CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+      LLVM: "1"
       DEFCONFIG: ${{ inputs.defconfig || 'sprd_qogirn6pro_defconfig' }}
       KCFLAGS_EXTRA: ${{ github.event_name == 'workflow_dispatch' && inputs.kcflags || '-Wno-error' }}
       # Stable ccache behaviour across runners: kernel builds embed paths and
@@ -64,22 +66,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             bc bison flex libelf-dev libssl-dev lz4 zstd xz-utils \
-            device-tree-compiler gcc gcc-aarch64-linux-gnu ccache git make zip
+            device-tree-compiler gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            clang-14 llvm-14 lld-14 cpio ccache git make zip
+          # Select the complete LLVM 14 suite for configure AND build.
+          echo '/usr/lib/llvm-14/bin' >> "$GITHUB_PATH"
 
       - name: Restore ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: cp3nv1-${{ env.DEFCONFIG }}-${{ runner.os }}
+          key: cp3nv1-llvm14-${{ env.DEFCONFIG }}-${{ runner.os }}
           max-size: ${{ env.CCACHE_MAXSIZE }}
           verbose: 1
 
       - name: Configure kernel
         run: |
           set -eu
-          make -s "$DEFCONFIG"
-          # Keep the CC version in the cache key honest by recording it.
+          make -s CC="ccache clang" "$DEFCONFIG"
+          scripts/config --file .config -e REGULATOR_SM5109 -e DRM_SPRD \
+            -e DRM_SPRD_DSI -e DRM_SPRD_DPU0
+          make -s CC="ccache clang" olddefconfig
           clang --version | head -1
-          grep -E '^CONFIG_(LOCALVERSION|DRM_SPRD|REGULATOR_SM5109)=' .config || true
+          ld.lld --version
+          llvm-ar --version | head -1
+          grep -E '^CONFIG_(LOCALVERSION|LTO_CLANG|CFI_CLANG|COMPAT_VDSO|DRM_SPRD|REGULATOR_SM5109)=' .config
+          grep -qx 'CONFIG_REGULATOR_SM5109=y' .config
+          grep -qx 'CONFIG_DRM_SPRD=y' .config
+          grep -qx 'CONFIG_LTO_CLANG=y' .config
+          grep -qx 'CONFIG_CFI_CLANG=y' .config
 
       - name: Build kernel image and modules
         run: |
