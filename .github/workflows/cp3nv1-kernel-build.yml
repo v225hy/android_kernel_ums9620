@@ -86,7 +86,8 @@ jobs:
           make -s CC="ccache clang" "$DEFCONFIG"
           scripts/config --file .config -e REGULATOR_SM5109 -e DRM_SPRD \
             -e DRM_SPRD_DSI -e DRM_SPRD_DPU0 \
-            -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK
+            -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK \
+            -e THINLTO
           make -s CC="ccache clang" olddefconfig
           clang --version | head -1
           ld.lld --version
@@ -101,7 +102,9 @@ jobs:
         run: |
           set -o pipefail
           ccache --zero-stats
-          if ! make -j"$(nproc)" \
+          free -h
+          df -h .
+          if ! make -j2 \
                 CC="ccache clang" \
                 KCFLAGS="$KCFLAGS_EXTRA" \
                 Image Image.gz modules 2>&1 | tee /tmp/build.log; then
