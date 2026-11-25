@@ -98,7 +98,7 @@ jobs:
           grep -qx 'CONFIG_LTO_CLANG=y' .config
           grep -qx 'CONFIG_CFI_CLANG=y' .config
 
-      - name: Build kernel image and modules
+      - name: Build raw kernel Image
         run: |
           set -o pipefail
           ccache --zero-stats
@@ -107,7 +107,7 @@ jobs:
           if ! make -j2 \
                 CC="ccache clang" \
                 KCFLAGS="$KCFLAGS_EXTRA" \
-                Image Image.gz modules 2>&1 | tee /tmp/build.log; then
+                Image 2>&1 | tee /tmp/build.log; then
             {
               echo '### Build failed — last 120 lines'
               echo '```'
