@@ -85,7 +85,8 @@ jobs:
           set -eu
           make -s CC="ccache clang" "$DEFCONFIG"
           scripts/config --file .config -e REGULATOR_SM5109 -e DRM_SPRD \
-            -e DRM_SPRD_DSI -e DRM_SPRD_DPU0
+            -e DRM_SPRD_DSI -e DRM_SPRD_DPU0 \
+            -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK
           make -s CC="ccache clang" olddefconfig
           clang --version | head -1
           ld.lld --version
