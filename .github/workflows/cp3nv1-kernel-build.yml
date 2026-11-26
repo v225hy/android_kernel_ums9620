@@ -28,6 +28,11 @@ on:
       - 'drivers/regulator/**'
       - 'include/uapi/**'
       - 'fs/f2fs/**'
+      - 'crypto/lz4*.c'
+      - 'lib/lz4/**'
+      - 'include/linux/lz4.h'
+      - 'include/linux/ion.h'
+      - 'drivers/staging/android/ion/cp3nv1_abi_check.c'
       - 'scripts/check-cp3nv1-panel.py'
       - 'scripts/repack-cp3nv1-boot.sh'
       - 'boot/stock/boot.img'
@@ -92,6 +97,7 @@ jobs:
           scripts/config --file .config -d REGULATOR_SM5109 -d DRM_SPRD \
             -m UNISOC_IOMMU -m DVFS_APSYS_SPRD -m SPRD_SOCID \
             -m TRUSTY -m TRUSTY_LOG -m TRUSTY_VIRTIO -m TRUSTY_VIRTIO_IPC \
+            -d E_SHOW_MEM \
             -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK -e THINLTO
           make -s CC="ccache clang" olddefconfig
           clang --version | head -1
@@ -100,11 +106,19 @@ jobs:
           grep -E '^CONFIG_(LOCALVERSION|LTO_CLANG|CFI_CLANG|COMPAT_VDSO|DRM_SPRD|REGULATOR_SM5109)=' .config
           grep -qx '# CONFIG_REGULATOR_SM5109 is not set' .config
           grep -qx '# CONFIG_DRM_SPRD is not set' .config
+          # Stock IOMMU reads ion_buffer.sg_table at offset 104. E_SHOW_MEM
+          # inserts an rb_node at the front and changes this module ABI.
+          grep -qx '# CONFIG_E_SHOW_MEM is not set' .config
           for provider in UNISOC_IOMMU DVFS_APSYS_SPRD SPRD_SOCID TRUSTY TRUSTY_LOG TRUSTY_VIRTIO TRUSTY_VIRTIO_IPC; do
             grep -qx "CONFIG_${provider}=m" .config
           done
           grep -qx 'CONFIG_LTO_CLANG=y' .config
           grep -qx 'CONFIG_CFI_CLANG=y' .config
+
+      - name: Verify stock ION module layout
+        run: |
+          make -s CC="ccache clang" KCFLAGS="$KCFLAGS_EXTRA" \
+            drivers/staging/android/ion/cp3nv1_abi_check.o
 
       - name: Build raw kernel Image
         run: |
