@@ -2864,6 +2864,8 @@ char* LZ4_slideInputBuffer (void* state)
  * These mirror the set the old in-kernel port exported; zram (backend_lz4),
  * crypto/lz4 and f2fs are built as modules and link against them.
  **************************************************************************/
+/* Context-taking API for crypto/f2fs; keep legacy stateless exports intact. */
+EXPORT_SYMBOL(LZ4_compress_fast_extState);
 EXPORT_SYMBOL(LZ4_compress_fast);
 EXPORT_SYMBOL(LZ4_compress_default);
 EXPORT_SYMBOL(LZ4_compress_destSize);

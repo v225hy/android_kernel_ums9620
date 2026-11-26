@@ -19,6 +19,7 @@ static void *lz4hc_alloc_ctx(struct crypto_scomp *tfm)
 {
 	void *ctx;
 
+	BUILD_BUG_ON(LZ4HC_MEM_COMPRESS < sizeof(LZ4_streamHC_t));
 	ctx = vmalloc(LZ4HC_MEM_COMPRESS);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
@@ -52,8 +53,8 @@ static void lz4hc_exit(struct crypto_tfm *tfm)
 static int __lz4hc_compress_crypto(const u8 *src, unsigned int slen,
 				   u8 *dst, unsigned int *dlen, void *ctx)
 {
-	int out_len = LZ4_compress_HC(src, dst, slen,
-		*dlen, LZ4HC_DEFAULT_CLEVEL, ctx);
+	int out_len = LZ4_compress_HC_extStateHC(ctx, src, dst, slen,
+					      *dlen, LZ4HC_DEFAULT_CLEVEL);
 
 	if (!out_len)
 		return -EINVAL;

@@ -20,6 +20,7 @@ static void *lz4_alloc_ctx(struct crypto_scomp *tfm)
 {
 	void *ctx;
 
+	BUILD_BUG_ON(LZ4_MEM_COMPRESS < sizeof(LZ4_stream_t));
 	ctx = vmalloc(LZ4_MEM_COMPRESS);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
@@ -53,7 +54,9 @@ static void lz4_exit(struct crypto_tfm *tfm)
 static int __lz4_compress_crypto(const u8 *src, unsigned int slen,
 				 u8 *dst, unsigned int *dlen, void *ctx)
 {
-	int out_len = LZ4_compress_default(src, dst, slen, *dlen);
+	/* Reuse the context: the stateless API puts a 16 KiB table on stack. */
+	int out_len = LZ4_compress_fast_extState(ctx, src, dst, slen, *dlen,
+					     LZ4_ACCELERATION_DEFAULT);
 
 	if (!out_len)
 		return -EINVAL;

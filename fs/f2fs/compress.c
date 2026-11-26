@@ -238,7 +238,10 @@ static int lz4_init_compress_ctx(struct compress_ctx *cc)
 {
 	unsigned int size = LZ4_MEM_COMPRESS;
 
+	BUILD_BUG_ON(LZ4_MEM_COMPRESS < sizeof(LZ4_stream_t));
+
 #ifdef CONFIG_F2FS_FS_LZ4HC
+	BUILD_BUG_ON(LZ4HC_MEM_COMPRESS < sizeof(LZ4_streamHC_t));
 	if (F2FS_I(cc->inode)->i_compress_flag >> COMPRESS_LEVEL_OFFSET)
 		size = LZ4HC_MEM_COMPRESS;
 #endif
@@ -270,11 +273,12 @@ static int lz4hc_compress_pages(struct compress_ctx *cc)
 	int len;
 
 	if (level)
-		len = LZ4_compress_HC(cc->rbuf, cc->cbuf->cdata, cc->rlen,
-					cc->clen, level);
+		len = LZ4_compress_HC_extStateHC(cc->private, cc->rbuf,
+				cc->cbuf->cdata, cc->rlen, cc->clen, level);
 	else
-		len = LZ4_compress_default(cc->rbuf, cc->cbuf->cdata, cc->rlen,
-						cc->clen);
+		len = LZ4_compress_fast_extState(cc->private, cc->rbuf,
+				cc->cbuf->cdata, cc->rlen, cc->clen,
+				LZ4_ACCELERATION_DEFAULT);
 	if (!len)
 		return -EAGAIN;
 
@@ -290,8 +294,9 @@ static int lz4_compress_pages(struct compress_ctx *cc)
 #ifdef CONFIG_F2FS_FS_LZ4HC
 	return lz4hc_compress_pages(cc);
 #endif
-	len = LZ4_compress_default(cc->rbuf, cc->cbuf->cdata, cc->rlen,
-						cc->clen);
+	len = LZ4_compress_fast_extState(cc->private, cc->rbuf,
+			cc->cbuf->cdata, cc->rlen, cc->clen,
+			LZ4_ACCELERATION_DEFAULT);
 	if (!len)
 		return -EAGAIN;
 

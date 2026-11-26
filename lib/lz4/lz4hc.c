@@ -2224,6 +2224,7 @@ char* LZ4_slideInputBufferHC(void* LZ4HC_Data)
 /*-************************************************************************
  *	Kernel exports
  **************************************************************************/
+EXPORT_SYMBOL(LZ4_compress_HC_extStateHC);
 EXPORT_SYMBOL(LZ4_compress_HC);
 EXPORT_SYMBOL(LZ4_loadDictHC);
 EXPORT_SYMBOL(LZ4_compress_HC_continue);

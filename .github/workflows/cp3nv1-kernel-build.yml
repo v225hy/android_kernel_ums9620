@@ -81,6 +81,9 @@ jobs:
           # Select the complete LLVM 14 suite for configure AND build.
           echo '/usr/lib/llvm-14/bin' >> "$GITHUB_PATH"
 
+      - name: Test LZ4 workspace compression
+        run: sh lib/lz4/test-workspace.sh
+
       - name: Restore ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
