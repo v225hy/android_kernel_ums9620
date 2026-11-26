@@ -120,8 +120,16 @@ jobs:
 
       - name: Verify stock ION module layout
         run: |
-          make -s CC="ccache clang" KCFLAGS="$KCFLAGS_EXTRA" \
-            drivers/staging/android/ion/cp3nv1_abi_check.o
+          set -o pipefail
+          if ! make CC="ccache clang" KCFLAGS="$KCFLAGS_EXTRA" \
+              drivers/staging/android/ion/cp3nv1_abi_check.o 2>&1 | tee /tmp/ion-check.log; then
+            python3 - <<'PY'
+          import pathlib
+          text = pathlib.Path('/tmp/ion-check.log').read_text()[-16000:]
+          print('::error::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PY
+            exit 1
+          fi
 
       - name: Build raw kernel Image
         run: |
