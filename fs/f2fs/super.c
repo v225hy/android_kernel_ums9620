@@ -108,6 +108,7 @@ enum {
 	Opt_fastboot,
 	Opt_extent_cache,
 	Opt_noextent_cache,
+	Opt_age_extent_cache_compat,
 	Opt_noinline_data,
 	Opt_data_flush,
 	Opt_reserve_root,
@@ -183,6 +184,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_fastboot, "fastboot"},
 	{Opt_extent_cache, "extent_cache"},
 	{Opt_noextent_cache, "noextent_cache"},
+	{Opt_age_extent_cache_compat, "age_extent_cache"},
 	{Opt_noinline_data, "noinline_data"},
 	{Opt_data_flush, "data_flush"},
 	{Opt_reserve_root, "reserve_root=%u"},
@@ -758,6 +760,14 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			break;
 		case Opt_noextent_cache:
 			clear_opt(sbi, EXTENT_CACHE);
+			break;
+		case Opt_age_extent_cache_compat:
+			/*
+			 * Vendor fstab compatibility only. This tree has no age
+			 * extent cache implementation; do not confuse it with the
+			 * independent read extent cache or change on-disk features.
+			 */
+			f2fs_warn(sbi, "age_extent_cache accepted for compatibility; age caching is unavailable");
 			break;
 		case Opt_noinline_data:
 			clear_opt(sbi, INLINE_DATA);

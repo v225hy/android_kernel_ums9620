@@ -27,6 +27,7 @@ on:
       - 'drivers/gpu/drm/sprd/**'
       - 'drivers/regulator/**'
       - 'include/uapi/**'
+      - 'fs/f2fs/**'
       - 'scripts/check-cp3nv1-panel.py'
       - 'scripts/repack-cp3nv1-boot.sh'
       - 'boot/stock/boot.img'
@@ -86,18 +87,22 @@ jobs:
         run: |
           set -eu
           make -s CC="ccache clang" "$DEFCONFIG"
-          scripts/config --file .config -e REGULATOR_SM5109 -e DRM_SPRD \
-            -e DRM_SPRD_DSI -e DRM_SPRD_DPU0 \
-            -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK \
-            -e THINLTO -e UNISOC_IOMMU -e DVFS_APSYS_SPRD \
-            -e TRUSTY -e TRUSTY_VIRTIO -e TRUSTY_VIRTIO_IPC -e SPRD_SOCID
+          # Stock vendor_boot supplies the display stack and these providers.
+          # Keep providers modular so their in-tree copies are not in Image.
+          scripts/config --file .config -d REGULATOR_SM5109 -d DRM_SPRD \
+            -m UNISOC_IOMMU -m DVFS_APSYS_SPRD -m SPRD_SOCID \
+            -m TRUSTY -m TRUSTY_LOG -m TRUSTY_VIRTIO -m TRUSTY_VIRTIO_IPC \
+            -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK -e THINLTO
           make -s CC="ccache clang" olddefconfig
           clang --version | head -1
           ld.lld --version
           llvm-ar --version | head -1
           grep -E '^CONFIG_(LOCALVERSION|LTO_CLANG|CFI_CLANG|COMPAT_VDSO|DRM_SPRD|REGULATOR_SM5109)=' .config
-          grep -qx 'CONFIG_REGULATOR_SM5109=y' .config
-          grep -qx 'CONFIG_DRM_SPRD=y' .config
+          grep -qx '# CONFIG_REGULATOR_SM5109 is not set' .config
+          grep -qx '# CONFIG_DRM_SPRD is not set' .config
+          for provider in UNISOC_IOMMU DVFS_APSYS_SPRD SPRD_SOCID TRUSTY TRUSTY_LOG TRUSTY_VIRTIO TRUSTY_VIRTIO_IPC; do
+            grep -qx "CONFIG_${provider}=m" .config
+          done
           grep -qx 'CONFIG_LTO_CLANG=y' .config
           grep -qx 'CONFIG_CFI_CLANG=y' .config
 
