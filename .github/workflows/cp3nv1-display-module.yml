@@ -88,19 +88,9 @@ jobs:
             -e TRUSTY -e TRUSTY_LOG -e TRUSTY_VIRTIO -e TRUSTY_VIRTIO_IPC \
             -d E_SHOW_MEM -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK -e THINLTO \
             -m DRM_SPRD -e DRM_SPRD_DPU0 -e DRM_SPRD_DSI -d DRM_SPRD_GSP
-          # CI git abbreviation depth can differ from the build that produced the
-          # running kernel, so pin the exact release string used in its vermagic.
-          python3 - <<'PY'
-          import os, re, pathlib
-          release = os.environ['KERNEL_RELEASE']
-          local = release[len('5.4.302'):]
-          p = pathlib.Path('.config')
-          s = p.read_text()
-          s = re.sub(r'^CONFIG_LOCALVERSION=.*$', 'CONFIG_LOCALVERSION="%s"' % local, s, flags=re.M)
-          s = re.sub(r'^CONFIG_LOCALVERSION_AUTO=.*$', '# CONFIG_LOCALVERSION_AUTO is not set', s, flags=re.M)
-          p.write_text(s)
-          PY
           make -s CC="ccache clang" olddefconfig
+          # setlocalversion uses 12 hex chars and appends -dirty for the modified
+          # .config, so this must reproduce the running kernel's release exactly.
           test "$(make -s kernelrelease)" = "$KERNEL_RELEASE"
           clang --version | head -1
           grep -qx 'CONFIG_DRM_SPRD=m' .config
