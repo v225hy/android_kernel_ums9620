@@ -1,0 +1,164 @@
+name: CP3NV1 display module
+
+# Build sprd-drm.ko against the exact kernel source/config used by the flashed
+# Image. The ref default is the commit whose kernel is currently running on the
+# test device, so the module vermagic and symbol CRCs line up with that build.
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: "Kernel commit to build the module against"
+        required: false
+        default: "3bad81cdce7d5461b566c26009ef2269c36f2e67"
+        type: string
+      defconfig:
+        description: "Defconfig name from arch/arm64/configs"
+        required: false
+        default: "sprd_qogirn6pro_defconfig"
+        type: string
+      kernel_release:
+        description: "Exact uname -r of the running kernel (vermagic must match)"
+        required: false
+        default: "5.4.302-g3bad81cdce7d-dirty"
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cp3nv1-display-module.yml'
+
+concurrency:
+  group: cp3nv1-display-module-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  module:
+    name: Build sprd-drm.ko
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+      LLVM: "1"
+      DEFCONFIG: ${{ inputs.defconfig || 'sprd_qogirn6pro_defconfig' }}
+      KERNEL_REF: ${{ inputs.kernel_ref || '3bad81cdce7d5461b566c26009ef2269c36f2e67' }}
+      KERNEL_RELEASE: ${{ inputs.kernel_release || '5.4.302-g3bad81cdce7d-dirty' }}
+      KCFLAGS_EXTRA: "-Wno-error"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: "content"
+      CCACHE_SLOPPINESS: "file_macro,time_macros,include_file_mtime,include_file_ctime"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.kernel_ref || '3bad81cdce7d5461b566c26009ef2269c36f2e67' }}
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libelf-dev libssl-dev lz4 zstd xz-utils \
+            device-tree-compiler gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            clang-14 llvm-14 lld-14 cpio ccache git make zip wget \
+            libc6-dev-arm64-cross libc6-dev-armel-cross
+          echo '/usr/lib/llvm-14/bin' >> "$GITHUB_PATH"
+
+      - name: Restore ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: cp3nv1-llvm14-${{ env.DEFCONFIG }}-${{ runner.os }}
+          max-size: 3G
+          verbose: 1
+
+      - name: Configure kernel with module display driver
+        run: |
+          set -eu
+          make -s CC="ccache clang" "$DEFCONFIG"
+          # Same overrides as the flashed Image, but build DRM_SPRD as a module.
+          # Providers are built in here only so Module.symvers carries the CRC of
+          # the five module-provided symbols the display driver imports. CRCs are
+          # type-derived, so they match provider modules built from this source.
+          scripts/config --file .config -d REGULATOR_SM5109 -d DRM_SPRD \
+            -e UNISOC_IOMMU -e DVFS_APSYS_SPRD -e SPRD_SOCID \
+            -e TRUSTY -e TRUSTY_LOG -e TRUSTY_VIRTIO -e TRUSTY_VIRTIO_IPC \
+            -d E_SHOW_MEM -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK -e THINLTO \
+            -m DRM_SPRD -e DRM_SPRD_DPU0 -e DRM_SPRD_DSI -d DRM_SPRD_GSP
+          # CI git abbreviation depth can differ from the build that produced the
+          # running kernel, so pin the exact release string used in its vermagic.
+          python3 - <<'PY'
+          import os, re, pathlib
+          release = os.environ['KERNEL_RELEASE']
+          local = release[len('5.4.302'):]
+          p = pathlib.Path('.config')
+          s = p.read_text()
+          s = re.sub(r'^CONFIG_LOCALVERSION=.*$', 'CONFIG_LOCALVERSION="%s"' % local, s, flags=re.M)
+          s = re.sub(r'^CONFIG_LOCALVERSION_AUTO=.*$', '# CONFIG_LOCALVERSION_AUTO is not set', s, flags=re.M)
+          p.write_text(s)
+          PY
+          make -s CC="ccache clang" olddefconfig
+          test "$(make -s kernelrelease)" = "$KERNEL_RELEASE"
+          clang --version | head -1
+          grep -qx 'CONFIG_DRM_SPRD=m' .config
+          grep -qx 'CONFIG_DRM_SPRD_DPU0=y' .config
+          grep -qx 'CONFIG_DRM_SPRD_DSI=y' .config
+          grep -qx '# CONFIG_DRM_SPRD_GSP is not set' .config
+          grep -qx '# CONFIG_E_SHOW_MEM is not set' .config
+          for provider in UNISOC_IOMMU DVFS_APSYS_SPRD SPRD_SOCID TRUSTY TRUSTY_LOG TRUSTY_VIRTIO TRUSTY_VIRTIO_IPC; do
+            grep -qx "CONFIG_${provider}=y" .config
+          done
+          echo "kernel release: $(cat include/config/kernel.release)"
+
+      - name: Build vmlinux and Module.symvers
+        run: |
+          set -o pipefail
+          make -j2 CC="ccache clang" KCFLAGS="$KCFLAGS_EXTRA" Image 2>&1 | tee /tmp/image.log
+          test -s vmlinux
+          test -s Module.symvers
+
+      - name: Check dependency symbol CRCs
+        run: |
+          for sym in sprd_iommu_map sprd_iommu_unmap sprd_iommu_restore dpu_dvfs_notifier_call_chain trusty_fast_call32; do
+            grep -q "	$sym	" Module.symvers || { echo "missing CRC for $sym"; exit 1; }
+          done
+
+      - name: Build sprd-drm.ko
+        run: |
+          set -o pipefail
+          make -j2 CC="ccache clang" KCFLAGS="$KCFLAGS_EXTRA" \
+            M=drivers/gpu/drm/sprd modules 2>&1 | tee /tmp/module.log
+          if grep -q "no symbol version for sprd_iommu_map" /tmp/module.log; then
+            echo "module has missing symbol CRCs"; exit 1
+          fi
+          KO=drivers/gpu/drm/sprd/sprd-drm.ko
+          test -s "$KO"
+          RELEASE=$(cat include/config/kernel.release)
+          strings "$KO" | grep -m1 '^vermagic='
+          grep -aq "vermagic=$RELEASE " "$KO"
+          mkdir -p out-module
+          cp "$KO" out-module/
+          sha256sum out-module/sprd-drm.ko > out-module/sprd-drm.ko.sha256
+          {
+            echo "kernel_ref=$KERNEL_REF"
+            echo "kernel_release=$RELEASE"
+            echo "toolchain=$(clang --version | head -1)"
+            echo "config:"
+            grep -E '^CONFIG_(DRM_SPRD|DRM_SPRD_DPU0|DRM_SPRD_DSI|DRM_SPRD_GSP|E_SHOW_MEM|MODVERSIONS|UNISOC_IOMMU|DVFS_APSYS_SPRD|TRUSTY)=' .config || true
+            echo "modinfo:"
+            strings "$KO" | grep -E '^(vermagic|name|depends|license)='
+            echo "undefined module-provided symbols:"
+            aarch64-linux-gnu-nm -u "$KO" | awk '{print $2}' | \
+              grep -E '^(sprd_iommu|trusty_|dpu_dvfs)' | sort -u || true
+          } | tee out-module/report.txt
+
+      - name: Upload display module
+        uses: actions/upload-artifact@v4
+        with:
+          name: CP3NV1-sprd-drm-ko
+          path: out-module/
+          if-no-files-found: error
+          compression-level: 0
