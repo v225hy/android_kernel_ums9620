@@ -60,6 +60,7 @@ jobs:
             edk2src/Platform/Coolpad/ums9620_t157/cp3nv1/cp3nv1.dsc
           install -D -m 0644 edk2/cp3nv1/cp3nv1.fdf.inc \
             edk2src/Platform/Coolpad/ums9620_t157/cp3nv1/cp3nv1.fdf.inc
+          install -D -m 0644 edk2/cp3nv1/cp3nv1.dtb edk2src/cp3nv1.dtb
 
       - name: Build CP3NV1 UEFI
         run: |
@@ -84,6 +85,7 @@ jobs:
           python3 edk2src/tools/mkbootimg.py \
             --kernel edk2out/workspace/uefi-cp3nv1-kernel \
             --ramdisk empty-ramdisk \
+            --dtb edk2src/cp3nv1.dtb \
             --pagesize 4096 \
             --kernel_offset 0x00008000 \
             --ramdisk_offset 0x05400000 \
