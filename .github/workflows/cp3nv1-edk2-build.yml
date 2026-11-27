@@ -1,0 +1,99 @@
+name: CP3NV1 EDK2 build
+
+# Builds edk2-sprd for a CP3NV1 device package kept in this repo, then packages
+# BootShim + UEFI FD as an Android boot image. The uboot partition is not used:
+# it is 3 MiB and the UEFI FD is 32 MiB, so boot.img is the standard target.
+on:
+  workflow_dispatch:
+    inputs:
+      edk2_ref:
+        description: "edk2-sprd commit"
+        required: false
+        default: "bc96d74659f38fef1ec2d9eb4cba9a62a5f15f98"
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cp3nv1-edk2-build.yml'
+      - 'edk2/cp3nv1/**'
+
+concurrency:
+  group: cp3nv1-edk2-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      EDK2_REF: ${{ inputs.edk2_ref || 'bc96d74659f38fef1ec2d9eb4cba9a62a5f15f98' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install EDK2 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential uuid-dev clang llvm iasl nasm \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            python3 python3-pil python3-git gettext git make gzip \
+            abootimg libssl-dev
+
+      - name: Fetch edk2-sprd and submodules
+        run: |
+          set -eu
+          git clone https://github.com/hxzbaka/edk2-sprd.git edk2src
+          cd edk2src
+          git checkout "$EDK2_REF"
+          git submodule update --init --recursive
+
+      - name: Install CP3NV1 device package
+        run: |
+          set -eu
+          install -D -m 0644 edk2/cp3nv1/cp3nv1.conf \
+            edk2src/configs/devices/cp3nv1.conf
+          install -D -m 0644 edk2/cp3nv1/cp3nv1.dsc \
+            edk2src/Platform/Coolpad/ums9620_t157/cp3nv1/cp3nv1.dsc
+          install -D -m 0644 edk2/cp3nv1/cp3nv1.fdf.inc \
+            edk2src/Platform/Coolpad/ums9620_t157/cp3nv1/cp3nv1.fdf.inc
+
+      - name: Build CP3NV1 UEFI
+        run: |
+          set -o pipefail
+          cd edk2src
+          ./build.sh --device cp3nv1 --toolchain GCC5 --skip-rootfs-gen \
+            -O "$GITHUB_WORKSPACE/edk2out" 2>&1 | tee /tmp/edk2.log
+
+      - name: Package boot image
+        run: |
+          set -eu
+          test -s edk2out/workspace/uefi-cp3nv1-kernel
+          : > empty-ramdisk
+          python3 edk2src/tools/mkbootimg.py \
+            --kernel edk2out/workspace/uefi-cp3nv1-kernel \
+            --ramdisk empty-ramdisk \
+            --pagesize 4096 \
+            --kernel-offset 0x00008000 \
+            --ramdisk-offset 0x05400000 \
+            --tags-offset 0x00000100 \
+            --header-version 2 \
+            --os-version 13.0.0 \
+            --os-patch-level 2026-01 \
+            -o boot-cp3nv1.img
+          ls -l boot-cp3nv1.img edk2out/workspace/uefi-cp3nv1-kernel
+          sha256sum boot-cp3nv1.img edk2out/workspace/uefi-cp3nv1-kernel > edk2-sha256.txt
+
+      - name: Upload EDK2 boot image
+        uses: actions/upload-artifact@v4
+        with:
+          name: CP3NV1-EDK2-boot
+          path: |
+            boot-cp3nv1.img
+            edk2-sha256.txt
+            edk2out/workspace/uefi-cp3nv1-kernel
+          if-no-files-found: error
+          compression-level: 0
