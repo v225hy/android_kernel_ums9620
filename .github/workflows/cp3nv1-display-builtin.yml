@@ -1,0 +1,112 @@
+name: CP3NV1 display built-in
+
+# Test image: the in-tree SPRD DRM driver and its providers are built into the
+# kernel, so no module CRCs or vendor display module are involved. The vendor
+# sprd-drm.ko still loads but its driver registration fails with -EEXIST and it
+# stays inert; built-in drivers already own the devices. No flashing is done.
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: "Defconfig name from arch/arm64/configs"
+        required: false
+        default: "sprd_qogirn6pro_defconfig"
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cp3nv1-display-builtin.yml'
+
+concurrency:
+  group: cp3nv1-display-builtin-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+      LLVM: "1"
+      DEFCONFIG: ${{ inputs.defconfig || 'sprd_qogirn6pro_defconfig' }}
+      KCFLAGS_EXTRA: "-Wno-error"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: "content"
+      CCACHE_SLOPPINESS: "file_macro,time_macros,include_file_mtime,include_file_ctime"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libelf-dev libssl-dev lz4 zstd xz-utils \
+            device-tree-compiler gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            clang-14 llvm-14 lld-14 cpio ccache git make zip wget \
+            libc6-dev-arm64-cross libc6-dev-armel-cross
+          echo '/usr/lib/llvm-14/bin' >> "$GITHUB_PATH"
+
+      - name: Restore ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: cp3nv1-llvm14-${{ env.DEFCONFIG }}-${{ runner.os }}
+          max-size: 3G
+          verbose: 1
+
+      - name: Configure built-in display
+        run: |
+          set -eu
+          make -s CC="ccache clang" "$DEFCONFIG"
+          scripts/config --file .config -d REGULATOR_SM5109 \
+            -e DRM_SPRD -e DRM_SPRD_DPU0 -e DRM_SPRD_DSI -d DRM_SPRD_GSP \
+            -e UNISOC_IOMMU -e DVFS_APSYS_SPRD -e SPRD_SOCID \
+            -e TRUSTY -e TRUSTY_LOG -e TRUSTY_VIRTIO -e TRUSTY_VIRTIO_IPC \
+            -d E_SHOW_MEM -e KSU -d KSU_TRACEPOINT_HOOK -e KSU_MANUAL_HOOK -e THINLTO
+          make -s CC="ccache clang" olddefconfig
+          grep -qx 'CONFIG_DRM_SPRD=y' .config
+          grep -qx 'CONFIG_DRM_SPRD_DPU0=y' .config
+          grep -qx 'CONFIG_DRM_SPRD_DSI=y' .config
+          grep -qx '# CONFIG_E_SHOW_MEM is not set' .config
+          for p in UNISOC_IOMMU DVFS_APSYS_SPRD SPRD_SOCID TRUSTY TRUSTY_LOG TRUSTY_VIRTIO TRUSTY_VIRTIO_IPC; do
+            grep -qx "CONFIG_${p}=y" .config
+          done
+          test "$(make -s kernelrelease)" = "$(uname -r 2>/dev/null || true)" || true
+          echo "kernel release: $(make -s kernelrelease)"
+
+      - name: Build raw kernel Image
+        run: |
+          set -o pipefail
+          make -j2 CC="ccache clang" KCFLAGS="$KCFLAGS_EXTRA" Image 2>&1 | tee /tmp/image.log
+          test -s arch/arm64/boot/Image
+
+      - name: Repack stock boot with built-in display kernel
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/magiskboot"
+          wget -q --https-only -O "$RUNNER_TEMP/Magisk-v28.1.apk" \
+            https://github.com/topjohnwu/Magisk/releases/download/v28.1/Magisk-v28.1.apk
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          dst = pathlib.Path(os.environ['RUNNER_TEMP']) / 'magiskboot/magiskboot'
+          with zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP']) / 'Magisk-v28.1.apk') as apk:
+              dst.write_bytes(apk.read('lib/x86_64/libmagiskboot.so'))
+          dst.chmod(0o755)
+          PY
+          bash scripts/repack-cp3nv1-boot.sh "$RUNNER_TEMP/magiskboot/magiskboot"
+
+      - name: Upload built-in display boot
+        uses: actions/upload-artifact@v4
+        with:
+          name: CP3NV1-boot-display-builtin
+          path: out-boot/
+          if-no-files-found: error
+          compression-level: 0
