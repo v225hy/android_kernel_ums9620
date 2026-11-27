@@ -1,0 +1,48 @@
+name: Publish display module
+
+# Artifacts need authentication to download; republish the already-built
+# module as a release asset so it can be fetched on the test phone directly.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run that holds CP3NV1-sprd-drm-ko"
+        required: false
+        default: "45969917367"
+        type: string
+      tag:
+        description: "Release tag"
+        required: false
+        default: "cp3nv1-sprd-drm-3bad81cdc"
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cp3nv1-publish-module.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download module artifact and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id || '45969917367' }}
+          TAG: ${{ inputs.tag || 'cp3nv1-sprd-drm-3bad81cdc' }}
+        run: |
+          set -eu
+          gh run download "$RUN_ID" -n CP3NV1-sprd-drm-ko -D out
+          ls -l out
+          sha256sum out/sprd-drm.ko
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" out/sprd-drm.ko out/report.txt --clobber
+          else
+            gh release create "$TAG" out/sprd-drm.ko out/report.txt \
+              --title "CP3NV1 sprd-drm.ko ($TAG)" \
+              --notes "Test-only display module built from commit 3bad81cdc. Not a stable release; delete when done."
+          fi
+          gh release view "$TAG" --json url,assets
