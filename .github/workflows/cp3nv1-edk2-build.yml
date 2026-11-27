@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -85,12 +85,12 @@ jobs:
             --kernel edk2out/workspace/uefi-cp3nv1-kernel \
             --ramdisk empty-ramdisk \
             --pagesize 4096 \
-            --kernel-offset 0x00008000 \
-            --ramdisk-offset 0x05400000 \
-            --tags-offset 0x00000100 \
-            --header-version 2 \
-            --os-version 13.0.0 \
-            --os-patch-level 2026-01 \
+            --kernel_offset 0x00008000 \
+            --ramdisk_offset 0x05400000 \
+            --tags_offset 0x00000100 \
+            --header_version 2 \
+            --os_version 13.0.0 \
+            --os_patch_level 2026-01 \
             -o boot-cp3nv1.img
           ls -l boot-cp3nv1.img edk2out/workspace/uefi-cp3nv1-kernel
           sha256sum boot-cp3nv1.img edk2out/workspace/uefi-cp3nv1-kernel > edk2-sha256.txt
@@ -105,3 +105,17 @@ jobs:
             edk2out/workspace/uefi-cp3nv1-kernel
           if-no-files-found: error
           compression-level: 0
+
+      - name: Publish test boot image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          TAG=cp3nv1-edk2-test
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" boot-cp3nv1.img edk2-sha256.txt --clobber
+          else
+            gh release create "$TAG" boot-cp3nv1.img edk2-sha256.txt \
+              --title "CP3NV1 EDK2 test boot image" \
+              --notes "Experimental UEFI boot image. Flash to the boot partition, never to the 3 MiB uboot partition."
+          fi
