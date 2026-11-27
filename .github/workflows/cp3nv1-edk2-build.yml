@@ -66,7 +66,7 @@ jobs:
           set -o pipefail
           mkdir -p "$GITHUB_WORKSPACE/edk2out"
           cd edk2src
-          if ! ./build.sh --device cp3nv1 --toolchain GCC5 --skip-rootfs-gen \
+          if ! ./build.sh --device cp3nv1 --toolchain GCC5 \
               -O "$GITHUB_WORKSPACE/edk2out" 2>&1 | tee /tmp/edk2.log; then
             python3 - <<'PY'
           import pathlib
